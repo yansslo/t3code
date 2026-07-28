@@ -44,6 +44,8 @@ import {
 
 import { GitManagerError, GitPullRequestMaterializationError } from "@t3tools/contracts";
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
+import * as ProjectPreferencesResolver from "../project/ProjectPreferencesResolver.ts";
+import { textGenerationPolicyFromInstructions } from "../textGeneration/TextGenerationPolicy.ts";
 import * as ProjectSetupScriptRunner from "../project/ProjectSetupScriptRunner.ts";
 import { extractBranchNameFromRemoteRef } from "./remoteRefs.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -565,6 +567,7 @@ export const make = Effect.gen(function* () {
   const gitCore = yield* GitVcsDriver.GitVcsDriver;
   const sourceControlProviders = yield* SourceControlProviderRegistry.SourceControlProviderRegistry;
   const textGeneration = yield* TextGeneration.TextGeneration;
+  const projectPreferencesResolver = yield* ProjectPreferencesResolver.ProjectPreferencesResolver;
   const projectSetupScriptRunner = yield* ProjectSetupScriptRunner.ProjectSetupScriptRunner;
   const crypto = yield* Crypto.Crypto;
 
@@ -765,6 +768,35 @@ export const make = Effect.gen(function* () {
     );
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+
+  /**
+   * Resolve the generation policy for whichever project owns `cwd`.
+   *
+   * `cwd` is often a worktree rather than the project root, so the main
+   * worktree is derived from `--git-common-dir` before looking the project up.
+   * Any failure degrades to the global-only policy: customized prompt text is
+   * never worth failing a commit or PR over.
+   */
+  const resolveTextGenerationPolicy = (cwd: string) =>
+    gitCore
+      .execute({
+        operation: "GitManager.resolveWorkspaceRoot",
+        cwd,
+        args: ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+      })
+      .pipe(
+        Effect.map((result) => {
+          const commonDir = result.stdout.trim();
+          return commonDir ? path.dirname(commonDir) : null;
+        }),
+        Effect.catchCause(() => Effect.succeed(null)),
+        Effect.flatMap((workspaceRoot) =>
+          projectPreferencesResolver.resolveForWorkspaceRoot(workspaceRoot),
+        ),
+        Effect.map((preferences) =>
+          textGenerationPolicyFromInstructions(preferences.textGenerationInstructions),
+        ),
+      );
 
   const tempDir = process.env.TMPDIR ?? process.env.TEMP ?? process.env.TMP ?? "/tmp";
   const canonicalizeExistingPath = (value: string) =>
@@ -1349,6 +1381,7 @@ export const make = Effect.gen(function* () {
         };
       }
 
+      const policy = yield* resolveTextGenerationPolicy(input.cwd);
       const generated = yield* textGeneration
         .generateCommitMessage({
           cwd: input.cwd,
@@ -1357,6 +1390,7 @@ export const make = Effect.gen(function* () {
           stagedPatch: limitContext(context.stagedPatch, 50_000),
           ...(input.includeBranch ? { includeBranch: true } : {}),
           modelSelection: input.modelSelection,
+          policy,
         })
         .pipe(Effect.map((result) => sanitizeCommitMessage(result)));
 
@@ -1541,6 +1575,7 @@ export const make = Effect.gen(function* () {
       diffSummary: limitContext(rangeContext.diffSummary, 20_000),
       diffPatch: limitContext(rangeContext.diffPatch, 60_000),
       modelSelection,
+      policy: yield* resolveTextGenerationPolicy(cwd),
     });
 
     const bodyFile = path.join(

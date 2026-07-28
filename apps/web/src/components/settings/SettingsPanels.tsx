@@ -67,6 +67,8 @@ import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
 import { formatRelativeTimeLabel, getRelativeTimeState } from "../../timestampFormat";
 import { Button } from "../ui/button";
 import { DraftInput } from "../ui/draft-input";
+import { DraftTextarea } from "../ui/draft-textarea";
+import { parseWorktreeCopyPatternInput } from "@t3tools/shared/worktreeCopy";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import { stackedThreadToast, toastManager } from "../ui/toast";
@@ -446,6 +448,13 @@ export function useSettingsRestore(onRestored?: () => void) {
         ? ["Delete confirmation"]
         : []),
       ...(isGitWritingModelDirty ? ["Git writing model"] : []),
+      ...(settings.textGenerationInstructions.commit !== ""
+        ? ["Commit message instructions"]
+        : []),
+      ...(settings.textGenerationInstructions.changeRequest !== ""
+        ? ["Pull request instructions"]
+        : []),
+      ...(settings.worktreeCopyPatterns.length > 0 ? ["Copy into new worktrees"] : []),
     ],
     [
       isGitWritingModelDirty,
@@ -462,8 +471,11 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.enableProviderUpdateChecks,
       settings.sidebarProjectGroupingMode,
       settings.sidebarThreadPreviewCount,
+      settings.textGenerationInstructions.changeRequest,
+      settings.textGenerationInstructions.commit,
       settings.timestampFormat,
       settings.wordWrap,
+      settings.worktreeCopyPatterns,
       theme,
     ],
   );
@@ -493,6 +505,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       defaultThreadEnvMode: DEFAULT_UNIFIED_SETTINGS.defaultThreadEnvMode,
       newWorktreesStartFromOrigin: DEFAULT_UNIFIED_SETTINGS.newWorktreesStartFromOrigin,
       addProjectBaseDirectory: DEFAULT_UNIFIED_SETTINGS.addProjectBaseDirectory,
+      textGenerationInstructions: DEFAULT_UNIFIED_SETTINGS.textGenerationInstructions,
+      worktreeCopyPatterns: DEFAULT_UNIFIED_SETTINGS.worktreeCopyPatterns,
       confirmThreadArchive: DEFAULT_UNIFIED_SETTINGS.confirmThreadArchive,
       confirmThreadDelete: DEFAULT_UNIFIED_SETTINGS.confirmThreadDelete,
       textGenerationModelSelection: DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection,
@@ -1071,6 +1085,81 @@ export function GeneralSettingsPanel() {
             </div>
           }
         />
+
+        <SettingsRow
+          title="Commit message instructions"
+          description="Extra guidance appended to the built-in commit message prompt. A project that sets its own instructions replaces these."
+          resetAction={
+            settings.textGenerationInstructions.commit !== "" ? (
+              <SettingResetButton
+                label="commit message instructions"
+                onClick={() => updateSettings({ textGenerationInstructions: { commit: "" } })}
+              />
+            ) : null
+          }
+        >
+          <DraftTextarea
+            className="mt-3"
+            size="sm"
+            value={settings.textGenerationInstructions.commit}
+            onCommit={(next) => updateSettings({ textGenerationInstructions: { commit: next } })}
+            placeholder="e.g. Use Conventional Commits, and include a scope when it is obvious from the diff."
+            spellCheck={false}
+            aria-label="Commit message instructions"
+          />
+        </SettingsRow>
+
+        <SettingsRow
+          title="Pull request instructions"
+          description="Extra guidance appended to the built-in pull request title and body prompt."
+          resetAction={
+            settings.textGenerationInstructions.changeRequest !== "" ? (
+              <SettingResetButton
+                label="pull request instructions"
+                onClick={() =>
+                  updateSettings({ textGenerationInstructions: { changeRequest: "" } })
+                }
+              />
+            ) : null
+          }
+        >
+          <DraftTextarea
+            className="mt-3"
+            size="sm"
+            value={settings.textGenerationInstructions.changeRequest}
+            onCommit={(next) =>
+              updateSettings({ textGenerationInstructions: { changeRequest: next } })
+            }
+            placeholder="e.g. Keep the summary to three bullets and always link the tracking issue."
+            spellCheck={false}
+            aria-label="Pull request instructions"
+          />
+        </SettingsRow>
+
+        <SettingsRow
+          title="Copy into new worktrees"
+          description="Untracked files copied from the project root each time a worktree is created, one glob per line. Files git already placed in the worktree are left alone."
+          resetAction={
+            settings.worktreeCopyPatterns.length > 0 ? (
+              <SettingResetButton
+                label="worktree copy patterns"
+                onClick={() => updateSettings({ worktreeCopyPatterns: [] })}
+              />
+            ) : null
+          }
+        >
+          <DraftTextarea
+            className="mt-3 font-mono"
+            size="sm"
+            value={settings.worktreeCopyPatterns.join("\n")}
+            onCommit={(next) =>
+              updateSettings({ worktreeCopyPatterns: parseWorktreeCopyPatternInput(next) })
+            }
+            placeholder={".env\n.env.local"}
+            spellCheck={false}
+            aria-label="Worktree copy patterns"
+          />
+        </SettingsRow>
       </SettingsSection>
 
       <SettingsSection title="About">

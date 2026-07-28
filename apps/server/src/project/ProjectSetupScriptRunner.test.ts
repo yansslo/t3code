@@ -7,7 +7,9 @@ import * as Schema from "effect/Schema";
 
 import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSnapshotQuery.ts";
 import * as TerminalManager from "../terminal/Manager.ts";
+import * as ProjectPreferencesResolver from "./ProjectPreferencesResolver.ts";
 import * as ProjectSetupScriptRunner from "./ProjectSetupScriptRunner.ts";
+import * as WorktreeFileSeeder from "./WorktreeFileSeeder.ts";
 
 const isProjectSetupScriptOperationError = Schema.is(
   ProjectSetupScriptRunner.ProjectSetupScriptOperationError,
@@ -60,13 +62,37 @@ const makeTerminalManagerLayer = (
     subscribeMetadata: () => Effect.succeed(() => undefined),
   });
 
+const makeProjectPreferencesResolverLayer = (patterns: ReadonlyArray<string>) =>
+  Layer.succeed(ProjectPreferencesResolver.ProjectPreferencesResolver, {
+    resolveForWorkspaceRoot: () =>
+      Effect.succeed({
+        ...ProjectPreferencesResolver.EMPTY_RESOLVED_PROJECT_PREFERENCES,
+        worktreeCopyPatterns: patterns,
+      }),
+  });
+
+const makeWorktreeFileSeederLayer = (
+  seed: WorktreeFileSeeder.WorktreeFileSeeder["Service"]["seed"],
+) => Layer.succeed(WorktreeFileSeeder.WorktreeFileSeeder, { seed });
+
 const testLayer = (
   project: OrchestrationProject,
   terminal: Pick<TerminalManager.TerminalManager["Service"], "open" | "write">,
+  options?: {
+    readonly patterns?: ReadonlyArray<string>;
+    readonly seed?: WorktreeFileSeeder.WorktreeFileSeeder["Service"]["seed"];
+  },
 ) =>
   ProjectSetupScriptRunner.layer.pipe(
     Layer.provideMerge(makeProjectionSnapshotQueryLayer(project)),
     Layer.provideMerge(makeTerminalManagerLayer(terminal)),
+    Layer.provideMerge(makeProjectPreferencesResolverLayer(options?.patterns ?? [])),
+    Layer.provideMerge(
+      makeWorktreeFileSeederLayer(
+        options?.seed ??
+          (() => Effect.succeed(WorktreeFileSeeder.EMPTY_WORKTREE_FILE_SEED_RESULT)),
+      ),
+    ),
   );
 
 describe("ProjectSetupScriptRunner", () => {
@@ -83,7 +109,10 @@ describe("ProjectSetupScriptRunner", () => {
         worktreePath: "/repo/worktrees/a",
       });
 
-      expect(result).toEqual({ status: "no-script" });
+      expect(result).toEqual({
+        status: "no-script",
+        seed: WorktreeFileSeeder.EMPTY_WORKTREE_FILE_SEED_RESULT,
+      });
       expect(open).not.toHaveBeenCalled();
       expect(write).not.toHaveBeenCalled();
     }).pipe(Effect.provide(testLayer(project, { open, write })));
@@ -132,6 +161,7 @@ describe("ProjectSetupScriptRunner", () => {
           scriptName: "Setup",
           terminalId: "setup-setup",
           cwd: "/repo/worktrees/a",
+          seed: WorktreeFileSeeder.EMPTY_WORKTREE_FILE_SEED_RESULT,
         });
         expect(open).toHaveBeenCalledWith({
           threadId: "thread-1",
@@ -151,6 +181,96 @@ describe("ProjectSetupScriptRunner", () => {
       }).pipe(Effect.provide(testLayer(project, { open, write })));
     },
   );
+
+  it.effect("seeds worktree files before launching the setup script", () => {
+    const order: string[] = [];
+    const open = vi.fn(() => {
+      order.push("open");
+      return Effect.succeed({
+        threadId: "thread-1",
+        terminalId: "setup-setup",
+        cwd: "/repo/worktrees/a",
+        worktreePath: "/repo/worktrees/a",
+        status: "running" as const,
+        pid: 123,
+        history: "",
+        exitCode: null,
+        exitSignal: null,
+        label: "setup-setup",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      });
+    });
+    const write = vi.fn(() => Effect.void);
+    const seed = vi.fn(() => {
+      order.push("seed");
+      return Effect.succeed({
+        ...WorktreeFileSeeder.EMPTY_WORKTREE_FILE_SEED_RESULT,
+        copied: [".env"],
+      });
+    });
+    const project = makeProject([
+      {
+        id: "setup",
+        name: "Setup",
+        command: "bun install",
+        icon: "configure",
+        runOnWorktreeCreate: true,
+      },
+    ]);
+
+    return Effect.gen(function* () {
+      const runner = yield* ProjectSetupScriptRunner.ProjectSetupScriptRunner;
+      const result = yield* runner.runForThread({
+        threadId: "thread-1",
+        projectId: "project-1",
+        worktreePath: "/repo/worktrees/a",
+      });
+
+      // The install command must be able to read the files it was given.
+      expect(order).toEqual(["seed", "open"]);
+      expect(seed).toHaveBeenCalledWith({
+        projectRoot: "/repo/project",
+        worktreePath: "/repo/worktrees/a",
+        patterns: [".env"],
+      });
+      expect(result.seed.copied).toEqual([".env"]);
+    }).pipe(
+      Effect.provide(testLayer(project, { open, write }, { patterns: [".env"], seed })),
+    );
+  });
+
+  it.effect("seeds worktree files even when there is no setup script", () => {
+    const seed = vi.fn(() =>
+      Effect.succeed({
+        ...WorktreeFileSeeder.EMPTY_WORKTREE_FILE_SEED_RESULT,
+        copied: [".env"],
+      }),
+    );
+    const project = makeProject([]);
+
+    return Effect.gen(function* () {
+      const runner = yield* ProjectSetupScriptRunner.ProjectSetupScriptRunner;
+      const result = yield* runner.runForThread({
+        threadId: "thread-1",
+        projectId: "project-1",
+        worktreePath: "/repo/worktrees/a",
+      });
+
+      expect(result.status).toBe("no-script");
+      expect(result.seed.copied).toEqual([".env"]);
+    }).pipe(
+      Effect.provide(
+        testLayer(
+          project,
+          {
+            open: () => Effect.die("unexpected open"),
+            write: () => Effect.die("unexpected write"),
+          },
+          { patterns: [".env"], seed },
+        ),
+      ),
+    );
+  });
 
   it.effect("keeps terminal failures as the exact cause of a structured operation error", () => {
     const rootCause = new Error("stat failed");

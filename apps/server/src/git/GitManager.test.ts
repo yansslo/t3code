@@ -28,7 +28,9 @@ import * as VcsProcess from "../vcs/VcsProcess.ts";
 import * as GitHubSourceControlProvider from "../sourceControl/GitHubSourceControlProvider.ts";
 import * as SourceControlProviderRegistry from "../sourceControl/SourceControlProviderRegistry.ts";
 import * as ServerConfig from "../config.ts";
+import * as ProjectPreferencesResolver from "../project/ProjectPreferencesResolver.ts";
 import * as ProjectSetupScriptRunner from "../project/ProjectSetupScriptRunner.ts";
+import * as WorktreeFileSeeder from "../project/WorktreeFileSeeder.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as GitManager from "./GitManager.ts";
 
@@ -641,6 +643,7 @@ function makeManager(input?: {
   ghScenario?: FakeGhScenario;
   textGeneration?: Partial<FakeGitTextGeneration>;
   setupScriptRunner?: ProjectSetupScriptRunner.ProjectSetupScriptRunner["Service"];
+  projectPreferences?: ProjectPreferencesResolver.ResolvedProjectPreferences;
 }) {
   const { service: gitHubCli, ghCalls } = createGitHubCliWithFakeGh(input?.ghScenario);
   const textGeneration = createTextGeneration(input?.textGeneration);
@@ -675,9 +678,20 @@ function makeManager(input?: {
     Layer.succeed(
       ProjectSetupScriptRunner.ProjectSetupScriptRunner,
       input?.setupScriptRunner ?? {
-        runForThread: () => Effect.succeed({ status: "no-script" as const }),
+        runForThread: () =>
+          Effect.succeed({
+            status: "no-script" as const,
+            seed: WorktreeFileSeeder.EMPTY_WORKTREE_FILE_SEED_RESULT,
+          }),
       },
     ),
+    Layer.succeed(ProjectPreferencesResolver.ProjectPreferencesResolver, {
+      resolveForWorkspaceRoot: () =>
+        Effect.succeed(
+          input?.projectPreferences ??
+            ProjectPreferencesResolver.EMPTY_RESOLVED_PROJECT_PREFERENCES,
+        ),
+    }),
     vcsDriverLayer,
     serverSettingsLayer,
   ).pipe(Layer.provideMerge(sourceControlRegistryLayer), Layer.provideMerge(NodeServices.layer));
@@ -3169,7 +3183,10 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           runForThread: (setupInput) =>
             Effect.sync(() => {
               setupCalls.push(setupInput);
-              return { status: "no-script" as const };
+              return {
+                status: "no-script" as const,
+                seed: WorktreeFileSeeder.EMPTY_WORKTREE_FILE_SEED_RESULT,
+              };
             }),
         },
       });
@@ -3395,7 +3412,10 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           runForThread: (setupInput) =>
             Effect.sync(() => {
               setupCalls.push(setupInput);
-              return { status: "no-script" as const };
+              return {
+                status: "no-script" as const,
+                seed: WorktreeFileSeeder.EMPTY_WORKTREE_FILE_SEED_RESULT,
+              };
             }),
         },
       });

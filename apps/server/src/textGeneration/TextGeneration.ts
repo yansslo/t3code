@@ -5,6 +5,7 @@ import type { ChatAttachment, ModelSelection, ProviderInstanceId } from "@t3tool
 import { TextGenerationError } from "@t3tools/contracts";
 
 import * as ProviderInstanceRegistry from "../provider/Services/ProviderInstanceRegistry.ts";
+import type { TextGenerationPolicy } from "./TextGenerationPolicy.ts";
 import type { ProviderInstance } from "../provider/ProviderDriver.ts";
 
 export type TextGenerationProvider = "codex" | "claudeAgent" | "cursor" | "grok" | "opencode";
@@ -18,6 +19,8 @@ export interface CommitMessageGenerationInput {
   includeBranch?: boolean;
   /** What model and provider to use for generation. */
   modelSelection: ModelSelection;
+  /** Caller-supplied instructions appended to the built-in prompt. */
+  policy?: TextGenerationPolicy | undefined;
 }
 
 export interface CommitMessageGenerationResult {
@@ -36,6 +39,8 @@ export interface PrContentGenerationInput {
   diffPatch: string;
   /** What model and provider to use for generation. */
   modelSelection: ModelSelection;
+  /** Caller-supplied instructions appended to the built-in prompt. */
+  policy?: TextGenerationPolicy | undefined;
 }
 
 export interface PrContentGenerationResult {

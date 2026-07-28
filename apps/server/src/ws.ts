@@ -900,6 +900,7 @@ const makeWsRpcLayer = (
             readonly scriptId: string;
             readonly scriptName: string;
             readonly terminalId: string;
+            readonly seededFiles: ReadonlyArray<string>;
           }) =>
             Effect.gen(function* () {
               const startedAt = yield* nowIso;
@@ -908,6 +909,7 @@ const makeWsRpcLayer = (
                 scriptName: input.scriptName,
                 terminalId: input.terminalId,
                 worktreePath: input.worktreePath,
+                ...(input.seededFiles.length > 0 ? { seededFiles: input.seededFiles } : {}),
               };
               yield* Effect.all([
                 appendSetupScriptActivity({
@@ -966,8 +968,17 @@ const makeWsRpcLayer = (
                         worktreePath,
                       }),
                     onSuccess: (setupResult) => {
+                      const seededFiles = setupResult.seed.copied;
                       if (setupResult.status !== "started") {
-                        return Effect.void;
+                        // No script to report against, so seeding is only
+                        // worth a log line.
+                        return seededFiles.length > 0
+                          ? Effect.logInfo("seeded worktree files without a setup script", {
+                              threadId: command.threadId,
+                              worktreePath,
+                              seededFiles,
+                            })
+                          : Effect.void;
                       }
                       return recordSetupScriptStarted({
                         requestedAt,
@@ -975,6 +986,7 @@ const makeWsRpcLayer = (
                         scriptId: setupResult.scriptId,
                         scriptName: setupResult.scriptName,
                         terminalId: setupResult.terminalId,
+                        seededFiles,
                       });
                     },
                   }),

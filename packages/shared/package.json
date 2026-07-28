@@ -87,6 +87,10 @@
       "types": "./src/projectScripts.ts",
       "import": "./src/projectScripts.ts"
     },
+    "./worktreeCopy": {
+      "types": "./src/worktreeCopy.ts",
+      "import": "./src/worktreeCopy.ts"
+    },
     "./t3ProjectFile": {
       "types": "./src/t3ProjectFile.ts",
       "import": "./src/t3ProjectFile.ts"

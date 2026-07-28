@@ -39,6 +39,32 @@ describe("buildCommitMessagePrompt", () => {
     expect(result.prompt).toContain("Return a JSON object with keys: subject, body, branch.");
   });
 
+  it("appends policy instructions when the caller supplies them", () => {
+    const result = buildCommitMessagePrompt({
+      branch: "main",
+      stagedSummary: "M README.md",
+      stagedPatch: "diff",
+      includeBranch: false,
+      policy: { commitInstructions: "Always use Conventional Commits." },
+    });
+
+    expect(result.prompt).toContain("Additional instructions:");
+    expect(result.prompt).toContain("Always use Conventional Commits.");
+  });
+
+  it("omits the instructions section when the policy has no commit text", () => {
+    const result = buildCommitMessagePrompt({
+      branch: "main",
+      stagedSummary: "M README.md",
+      stagedPatch: "diff",
+      includeBranch: false,
+      policy: { changeRequestInstructions: "PR only." },
+    });
+
+    expect(result.prompt).not.toContain("Additional instructions:");
+    expect(result.prompt).not.toContain("PR only.");
+  });
+
   it("shows (detached) when branch is null", () => {
     const result = buildCommitMessagePrompt({
       branch: null,
@@ -69,6 +95,33 @@ describe("buildPrContentPrompt", () => {
     expect(result.prompt).toContain("3 files changed");
     expect(result.prompt).toContain("Diff patch:");
     expect(result.prompt).toContain("export function login()");
+  });
+
+  it("appends policy instructions when the caller supplies them", () => {
+    const result = buildPrContentPrompt({
+      baseBranch: "main",
+      headBranch: "feature/auth",
+      commitSummary: "feat: add login page",
+      diffSummary: "3 files changed",
+      diffPatch: "diff",
+      policy: { changeRequestInstructions: "Always link the tracking issue." },
+    });
+
+    expect(result.prompt).toContain("Additional instructions:");
+    expect(result.prompt).toContain("Always link the tracking issue.");
+  });
+
+  it("ignores commit-only instructions", () => {
+    const result = buildPrContentPrompt({
+      baseBranch: "main",
+      headBranch: "feature/auth",
+      commitSummary: "feat: add login page",
+      diffSummary: "3 files changed",
+      diffPatch: "diff",
+      policy: { commitInstructions: "Conventional commits." },
+    });
+
+    expect(result.prompt).not.toContain("Additional instructions:");
   });
 });
 

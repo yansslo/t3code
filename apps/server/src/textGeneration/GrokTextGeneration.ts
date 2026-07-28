@@ -164,6 +164,7 @@ export const makeGrokTextGeneration = Effect.fn("makeGrokTextGeneration")(functi
         stagedSummary: input.stagedSummary,
         stagedPatch: input.stagedPatch,
         includeBranch: input.includeBranch === true,
+        ...(input.policy ? { policy: input.policy } : {}),
       });
 
       const generated = yield* runGrokJson({
@@ -191,6 +192,7 @@ export const makeGrokTextGeneration = Effect.fn("makeGrokTextGeneration")(functi
         commitSummary: input.commitSummary,
         diffSummary: input.diffSummary,
         diffPatch: input.diffPatch,
+        ...(input.policy ? { policy: input.policy } : {}),
       });
 
       const generated = yield* runGrokJson({

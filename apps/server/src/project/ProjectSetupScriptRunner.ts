@@ -8,9 +8,13 @@ import * as Schema from "effect/Schema";
 
 import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSnapshotQuery.ts";
 import * as TerminalManager from "../terminal/Manager.ts";
+import * as ProjectPreferencesResolver from "./ProjectPreferencesResolver.ts";
+import * as WorktreeFileSeeder from "./WorktreeFileSeeder.ts";
 
 export interface ProjectSetupScriptRunnerResultNoScript {
   readonly status: "no-script";
+  /** Files seeded into the worktree before the (absent) script would have run. */
+  readonly seed: WorktreeFileSeeder.WorktreeFileSeedResult;
 }
 
 export interface ProjectSetupScriptRunnerResultStarted {
@@ -19,6 +23,8 @@ export interface ProjectSetupScriptRunnerResultStarted {
   readonly scriptName: string;
   readonly terminalId: string;
   readonly cwd: string;
+  /** Files seeded into the worktree before the script was launched. */
+  readonly seed: WorktreeFileSeeder.WorktreeFileSeedResult;
 }
 
 export type ProjectSetupScriptRunnerResult =
@@ -81,6 +87,8 @@ export class ProjectSetupScriptRunner extends Context.Service<
 export const make = Effect.gen(function* () {
   const projectionSnapshotQuery = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
   const terminalManager = yield* TerminalManager.TerminalManager;
+  const worktreeFileSeeder = yield* WorktreeFileSeeder.WorktreeFileSeeder;
+  const projectPreferencesResolver = yield* ProjectPreferencesResolver.ProjectPreferencesResolver;
 
   const runForThread: ProjectSetupScriptRunner["Service"]["runForThread"] = Effect.fn(
     "ProjectSetupScriptRunner.runForThread",
@@ -124,10 +132,22 @@ export const make = Effect.gen(function* () {
       return yield* new ProjectSetupScriptProjectNotFoundError(errorContext);
     }
 
+    // Seed before the script runs so an install command sees the copied
+    // files (a `.env` that the install step reads, for example).
+    const preferences = yield* projectPreferencesResolver.resolveForWorkspaceRoot(
+      project.workspaceRoot,
+    );
+    const seed = yield* worktreeFileSeeder.seed({
+      projectRoot: project.workspaceRoot,
+      worktreePath: input.worktreePath,
+      patterns: preferences.worktreeCopyPatterns,
+    });
+
     const script = setupProjectScript(project.scripts);
     if (!script) {
       return {
         status: "no-script",
+        seed,
       } as const;
     }
 
@@ -179,6 +199,7 @@ export const make = Effect.gen(function* () {
       scriptName: script.name,
       terminalId,
       cwd,
+      seed,
     } as const;
   });
 

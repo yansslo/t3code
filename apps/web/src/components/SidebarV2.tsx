@@ -12,7 +12,11 @@ import {
   scopeThreadRef,
   scopedThreadKey,
 } from "@t3tools/client-runtime/environment";
-import type { ScopedThreadRef, SidebarProjectGroupingMode } from "@t3tools/contracts";
+import type {
+  ProjectPreferences,
+  ScopedThreadRef,
+  SidebarProjectGroupingMode,
+} from "@t3tools/contracts";
 import {
   AlarmClockIcon,
   AlarmClockOffIcon,
@@ -144,6 +148,8 @@ import {
   DialogPopup,
   DialogTitle,
 } from "./ui/dialog";
+import { parseWorktreeCopyPatternInput } from "@t3tools/shared/worktreeCopy";
+import { DraftTextarea } from "./ui/draft-textarea";
 import { Input } from "./ui/input";
 import { Kbd } from "./ui/kbd";
 import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "./ui/menu";
@@ -1321,6 +1327,39 @@ export default function SidebarV2() {
           stackedThreadToast({
             type: "error",
             title: "Failed to rename project",
+            description: error instanceof Error ? error.message : "An error occurred.",
+          }),
+        );
+      }
+    },
+    [updateProject],
+  );
+
+  /**
+   * Persist a partial change to one project's preference overrides.
+   *
+   * The whole `preferences` object is sent every time because the command
+   * replaces it wholesale; callers pass only the field they changed.
+   */
+  const updateProjectPreferences = useCallback(
+    async (member: SidebarProjectGroupMember, patch: Partial<ProjectPreferences>) => {
+      const merged: Record<string, unknown> = { ...member.preferences, ...patch };
+      // An explicit `undefined` in the patch means "clear this override";
+      // drop the key so it round-trips as absent rather than as null.
+      for (const key of Object.keys(merged)) {
+        if (merged[key] === undefined) delete merged[key];
+      }
+      const nextPreferences = merged as ProjectPreferences;
+      const result = await updateProject({
+        environmentId: member.environmentId,
+        input: { projectId: member.id, preferences: nextPreferences },
+      });
+      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+        const error = squashAtomCommandFailure(result);
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Failed to save project preferences",
             description: error instanceof Error ? error.message : "An error occurred.",
           }),
         );
@@ -2663,6 +2702,72 @@ export default function SidebarV2() {
                           </SelectItem>
                         </SelectPopup>
                       </Select>
+                    </label>
+                  </div>
+                  <div className="grid gap-4 sm:gap-3 sm:pl-7">
+                    <label className="grid min-w-0 gap-1.5">
+                      <span className="font-medium text-foreground">Commit message instructions</span>
+                      <span className="text-base text-muted-foreground/80 sm:text-sm">
+                        Replaces the instructions from settings for this project. Leave empty to
+                        inherit them.
+                      </span>
+                      <DraftTextarea
+                        size="sm"
+                        value={member.preferences?.textGenerationInstructions?.commit ?? ""}
+                        onCommit={(next) => {
+                          void updateProjectPreferences(member, {
+                            textGenerationInstructions: {
+                              commit: next,
+                              changeRequest:
+                                member.preferences?.textGenerationInstructions?.changeRequest ?? "",
+                            },
+                          });
+                        }}
+                        spellCheck={false}
+                        aria-label={`Commit message instructions for ${member.title}`}
+                      />
+                    </label>
+                    <label className="grid min-w-0 gap-1.5">
+                      <span className="font-medium text-foreground">
+                        Pull request instructions
+                      </span>
+                      <DraftTextarea
+                        size="sm"
+                        value={member.preferences?.textGenerationInstructions?.changeRequest ?? ""}
+                        onCommit={(next) => {
+                          void updateProjectPreferences(member, {
+                            textGenerationInstructions: {
+                              commit: member.preferences?.textGenerationInstructions?.commit ?? "",
+                              changeRequest: next,
+                            },
+                          });
+                        }}
+                        spellCheck={false}
+                        aria-label={`Pull request instructions for ${member.title}`}
+                      />
+                    </label>
+                    <label className="grid min-w-0 gap-1.5">
+                      <span className="font-medium text-foreground">Copy into new worktrees</span>
+                      <span className="text-base text-muted-foreground/80 sm:text-sm">
+                        One glob per line, relative to the project root. Leave empty to inherit the
+                        patterns from settings.
+                      </span>
+                      <DraftTextarea
+                        size="sm"
+                        className="font-mono"
+                        value={(member.preferences?.worktreeCopyPatterns ?? []).join("\n")}
+                        onCommit={(next) => {
+                          const patterns = parseWorktreeCopyPatternInput(next);
+                          void updateProjectPreferences(member, {
+                            // An empty box means "inherit", so drop the
+                            // override rather than storing an empty list.
+                            worktreeCopyPatterns: patterns.length > 0 ? patterns : undefined,
+                          });
+                        }}
+                        placeholder={".env\n.env.local"}
+                        spellCheck={false}
+                        aria-label={`Worktree copy patterns for ${member.title}`}
+                      />
                     </label>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 sm:pl-7">

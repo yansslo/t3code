@@ -212,6 +212,7 @@ export function projectEvent(
             workspaceRoot: payload.workspaceRoot,
             defaultModelSelection: payload.defaultModelSelection,
             scripts: payload.scripts,
+            ...(payload.preferences !== undefined ? { preferences: payload.preferences } : {}),
             createdAt: payload.createdAt,
             updatedAt: payload.updatedAt,
             deletedAt: null,
@@ -244,6 +245,9 @@ export function projectEvent(
                     ? { defaultModelSelection: payload.defaultModelSelection }
                     : {}),
                   ...(payload.scripts !== undefined ? { scripts: payload.scripts } : {}),
+                  ...(payload.preferences !== undefined
+                    ? { preferences: payload.preferences }
+                    : {}),
                   updatedAt: payload.updatedAt,
                 }
               : project,

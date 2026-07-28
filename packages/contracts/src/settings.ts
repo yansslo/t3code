@@ -5,6 +5,7 @@ import * as SchemaTransformation from "effect/SchemaTransformation";
 import { TrimmedNonEmptyString, TrimmedString } from "./baseSchemas.ts";
 import { DEFAULT_GIT_TEXT_GENERATION_MODEL, ProviderOptionSelections } from "./model.ts";
 import { ModelSelection } from "./orchestration.ts";
+import { TextGenerationInstructions, WorktreeCopyPatterns } from "./preferences.ts";
 import { ProviderInstanceConfig, ProviderInstanceId } from "./providerInstance.ts";
 
 // ── Client Settings (local-only) ───────────────────────────────
@@ -420,6 +421,12 @@ export const ServerSettings = Schema.Struct({
       }),
     ),
   ),
+  /** Global baseline; a project that sets its own instructions replaces these. */
+  textGenerationInstructions: TextGenerationInstructions.pipe(
+    Schema.withDecodingDefault(Effect.succeed({})),
+  ),
+  /** Global baseline; a project that sets its own patterns replaces these. */
+  worktreeCopyPatterns: WorktreeCopyPatterns.pipe(Schema.withDecodingDefault(Effect.succeed([]))),
 
   // Legacy single-instance-per-driver settings. Continues to be the source
   // of truth until `providerInstances` (below) lands per-driver migration
@@ -545,6 +552,15 @@ export const ServerSettingsPatch = Schema.Struct({
   newWorktreesStartFromOrigin: Schema.optionalKey(Schema.Boolean),
   addProjectBaseDirectory: Schema.optionalKey(TrimmedString),
   textGenerationModelSelection: Schema.optionalKey(ModelSelectionPatch),
+  textGenerationInstructions: Schema.optionalKey(
+    Schema.Struct({
+      commit: Schema.optionalKey(TrimmedString),
+      changeRequest: Schema.optionalKey(TrimmedString),
+    }),
+  ),
+  // Whole-list replacement: the editor always sends the full pattern list, and
+  // merging positional edits into an array patch has no sensible semantics.
+  worktreeCopyPatterns: Schema.optionalKey(WorktreeCopyPatterns),
   observability: Schema.optionalKey(
     Schema.Struct({
       otlpTracesUrl: Schema.optionalKey(TrimmedString),

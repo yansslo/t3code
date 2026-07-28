@@ -2,6 +2,11 @@ import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 
 import { ProjectScriptIcon } from "./orchestration.ts";
+import {
+  MAX_TEXT_GENERATION_INSTRUCTIONS_LENGTH,
+  MAX_WORKTREE_COPY_PATTERN_LENGTH,
+  MAX_WORKTREE_COPY_PATTERNS,
+} from "./preferences.ts";
 
 /** File name of the checked-in T3 project file, resolved at the workspace root. */
 export const T3_PROJECT_FILE_NAME = "t3.json";
@@ -58,6 +63,30 @@ export const T3ProjectFileScript = Schema.Struct({
 });
 export type T3ProjectFileScript = typeof T3ProjectFileScript.Type;
 
+export const T3ProjectFileTextGeneration = Schema.Struct({
+  commitInstructions: Schema.optionalKey(
+    trimmedNonEmpty(
+      {
+        description:
+          "Extra guidance appended to the commit message prompt. Replaces the instructions configured in T3 Code settings.",
+      },
+      MAX_TEXT_GENERATION_INSTRUCTIONS_LENGTH,
+    ),
+  ),
+  changeRequestInstructions: Schema.optionalKey(
+    trimmedNonEmpty(
+      {
+        description:
+          "Extra guidance appended to the pull request title/body prompt. Replaces the instructions configured in T3 Code settings.",
+      },
+      MAX_TEXT_GENERATION_INSTRUCTIONS_LENGTH,
+    ),
+  ),
+}).annotate({
+  description: "Project-specific guidance for generated commit messages and pull requests.",
+});
+export type T3ProjectFileTextGeneration = typeof T3ProjectFileTextGeneration.Type;
+
 export const T3ProjectFile = Schema.Struct({
   $schema: Schema.optionalKey(
     Schema.String.annotate({
@@ -79,6 +108,23 @@ export const T3ProjectFile = Schema.Struct({
         description: "Project scripts shared with everyone who opens this repository in T3 Code.",
       })
       .check(Schema.isMaxLength(T3_PROJECT_FILE_MAX_SCRIPTS)),
+  ),
+  textGeneration: Schema.optionalKey(T3ProjectFileTextGeneration),
+  worktreeCopyFiles: Schema.optionalKey(
+    Schema.Array(
+      trimmedNonEmpty(
+        {
+          description:
+            'Glob relative to the repository root, e.g. ".env*" or "config/local.json". Only `*` and `?` are supported, and they never match across directory separators.',
+        },
+        MAX_WORKTREE_COPY_PATTERN_LENGTH,
+      ),
+    )
+      .annotate({
+        description:
+          "Untracked files copied from the repository root into every new worktree. Files git already placed in the worktree are left alone. Replaces the patterns configured in T3 Code settings.",
+      })
+      .check(Schema.isMaxLength(MAX_WORKTREE_COPY_PATTERNS)),
   ),
 }).annotate({
   title: "T3 project file",

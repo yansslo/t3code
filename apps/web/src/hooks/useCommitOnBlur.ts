@@ -1,9 +1,20 @@
 import { type ChangeEvent, type KeyboardEvent, useState } from "react";
 
+type CommitOnBlurElement = HTMLInputElement | HTMLTextAreaElement;
+
+export interface UseCommitOnBlurOptions {
+  /**
+   * Whether Enter commits the value. Defaults to `true`, which suits
+   * single-line inputs; multi-line controls pass `false` so Enter inserts a
+   * newline instead.
+   */
+  readonly commitOnEnter?: boolean;
+}
+
 /**
  * Buffer text input locally so keystrokes don't cause a settings-wide
  * re-render (and optionally a server RPC round-trip) on every character.
- * `onCommit` fires on blur and on Enter.
+ * `onCommit` fires on blur, and on Enter unless `commitOnEnter` is false.
  *
  * The draft resynchronizes from the upstream `value` only when the input
  * is not focused, so an external push (e.g. an optimistic settings
@@ -15,12 +26,17 @@ import { type ChangeEvent, type KeyboardEvent, useState } from "react";
  *   const bag = useCommitOnBlur(instance.displayName ?? "", (next) => {...});
  *   <Input {...bag} placeholder="e.g. Work" />
  */
-export function useCommitOnBlur(value: string, onCommit: (next: string) => void) {
+export function useCommitOnBlur<E extends CommitOnBlurElement = HTMLInputElement>(
+  value: string,
+  onCommit: (next: string) => void,
+  options?: UseCommitOnBlurOptions,
+) {
   const [draft, setDraft] = useState<string | null>(null);
+  const commitOnEnter = options?.commitOnEnter ?? true;
 
   return {
     value: draft ?? value,
-    onChange: (event: ChangeEvent<HTMLInputElement>) => {
+    onChange: (event: ChangeEvent<E>) => {
       setDraft(event.target.value);
     },
     onFocus: () => {
@@ -33,10 +49,10 @@ export function useCommitOnBlur(value: string, onCommit: (next: string) => void)
         onCommit(next);
       }
     },
-    onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => {
-      if (event.key === "Enter") {
+    onKeyDown: (event: KeyboardEvent<E>) => {
+      if (commitOnEnter && event.key === "Enter") {
         event.preventDefault();
-        (event.target as HTMLInputElement).blur();
+        (event.target as E).blur();
       }
     },
   };

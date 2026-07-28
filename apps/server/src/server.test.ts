@@ -94,6 +94,7 @@ import * as BrowserTraceCollector from "./observability/BrowserTraceCollector.ts
 import * as ProjectFaviconResolver from "./project/ProjectFaviconResolver.ts";
 import * as T3ProjectFileLoader from "./project/T3ProjectFileLoader.ts";
 import * as ProjectSetupScriptRunner from "./project/ProjectSetupScriptRunner.ts";
+import * as WorktreeFileSeeder from "./project/WorktreeFileSeeder.ts";
 import * as RepositoryIdentityResolver from "./project/RepositoryIdentityResolver.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
 import * as WorkspaceEntries from "./workspace/WorkspaceEntries.ts";
@@ -649,7 +650,11 @@ const buildAppUnderTest = (options?: {
       Layer.provideMerge(vcsStatusBroadcasterLayer),
       Layer.provide(
         Layer.mock(ProjectSetupScriptRunner.ProjectSetupScriptRunner)({
-          runForThread: () => Effect.succeed({ status: "no-script" as const }),
+          runForThread: () =>
+            Effect.succeed({
+              status: "no-script" as const,
+              seed: WorktreeFileSeeder.EMPTY_WORKTREE_FILE_SEED_RESULT,
+            }),
           ...options?.layers?.projectSetupScriptRunner,
         }),
       ),
@@ -6835,6 +6840,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
               scriptName: "Setup",
               terminalId: "setup-setup",
               cwd: "/tmp/bootstrap-worktree",
+              seed: WorktreeFileSeeder.EMPTY_WORKTREE_FILE_SEED_RESULT,
             }),
         );
 
@@ -7088,6 +7094,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
             scriptName: "Setup",
             terminalId: "setup-setup",
             cwd: "/tmp/bootstrap-worktree",
+            seed: WorktreeFileSeeder.EMPTY_WORKTREE_FILE_SEED_RESULT,
           }),
       );
       let setupActivityAppendAttempt = 0;
