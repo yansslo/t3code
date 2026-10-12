@@ -1,0 +1,19 @@
+packages/shared/src/path.ts
+  s_5e5fc5cff48d20::t_34dc43acc09f56 52-55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a8b2fe6cf7e7a1f43aae72a0e5cf2f1a164838b6",
+  "prompts": {},
+  "sessions": {
+    "s_5e5fc5cff48d20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "95bd8ab3-5567-466f-b07e-fd713cb9c9b5",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Yan Slobodianik <12988040+yansslo@users.noreply.github.com>"
+    }
+  }
+}
