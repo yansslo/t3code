@@ -1,0 +1,28 @@
+name: zerobehind
+
+on:
+  schedule: [{ cron: "0 6 * * *" }]
+  workflow_dispatch:
+
+concurrency: { group: zerobehind, cancel-in-progress: false }
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with: { persist-credentials: false } # required: zerobehind never stores credentials
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          run-install: false
+      - uses: yansslo/zerobehind@main # ponytail: no release tags yet, pin to @v1 once tagged
+        with:
+          upstream: pingdotgg/t3code
+          upstream-branch: main
+          branch: yan/zerobehind
+          token: ${{ secrets.ZEROBEHIND_TOKEN }}
+          ai-gateway-api-key: ${{ secrets.AI_GATEWAY_API_KEY }}
+          post-merge: vp install && vp run --filter @t3tools/desktop ensure:electron
+          test: vp run test
