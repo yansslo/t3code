@@ -121,3 +121,7 @@ export function resolveWorkspaceFilePath(path: string, workspaceRoot: string): s
     ? `${base}\\${path.replaceAll("/", "\\")}`
     : `${base}/${path}`;
 }
+
+export function isPosixAbsolutePath(value: string): boolean {
+  return value.startsWith("/");
+}
