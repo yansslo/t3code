@@ -6,6 +6,8 @@ on:
 
 concurrency: { group: zerobehind, cancel-in-progress: false }
 
+permissions: { contents: read } # zerobehind pushes with ZEROBEHIND_TOKEN, not GITHUB_TOKEN
+
 jobs:
   sync:
     runs-on: ubuntu-latest
